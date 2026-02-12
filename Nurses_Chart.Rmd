@@ -117,6 +117,7 @@ ggplot(long_strikes, aes(y = reorder(name, duration_days))) +
   )
 ```
 TK - still need to figure out the dates so it's not to overwhelming. Probably will do something like: Hospital Name (Year), State
+TK - I have interviews with the nurses who were protesting in front of the NYC Presbyterian. I just need to figure out how to nicely put it together. Still looking for experts.
 
 
 
