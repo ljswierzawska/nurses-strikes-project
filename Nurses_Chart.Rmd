@@ -37,7 +37,7 @@ nurse_strikes <- rbind(nurse_strikes, new_rows)
 nurse_strikes_sorted <- nurse_strikes[order(-nurse_strikes$duration_days), ]
 
 # Display top 20
-head(nurse_strikes_sorted, 20)
+nurse_strikes_sorted
 ```
 In order to highlight the longest nurses' strikes in the recent years in the US and to not make the visualization too overwhelming, I've decided to include only the strikes that lasted longer than 2 weeks. 
 
@@ -119,5 +119,82 @@ ggplot(long_strikes, aes(y = reorder(name, duration_days))) +
 TK - still need to figure out the dates so it's not to overwhelming. Probably will do something like: Hospital Name (Year), State
 TK - I have interviews with the nurses who were protesting in front of the NYC Presbyterian. I just need to figure out how to nicely put it together. Still looking for experts.
 
+I had an idea that maybe a better methodological choice would be to focus on strikes in NY state. 
+```{r}
+ny_strikes <- nurse_strikes %>%
+  filter(state = "New York") %>%
+  mutate(
+    is_nyc = grepl("NYC|NewYork-Presbyterian|Mount Sinai Hospital, NYC|Montefiore Medical Center, NYC", name),
+    is_ongoing = grepl("ongoing", dates, ignore.case = TRUE)
+  ) %>%
+  arrange(duration_days)
+
+ny_strikes
+```
+
+```{r}
+ggplot(ny_strikes, aes(y = reorder(name, duration_days))) +
+  
+  # Lines for all strikes
+  geom_linerange(
+    aes(xmin = 0, xmax = duration_days, color = is_nyc),
+    linewidth = 1.4
+  ) +
+  
+  # Points for completed strikes only
+  geom_point(
+    data = filter(ny_strikes, !is_ongoing),
+    aes(x = duration_days, color = is_nyc),
+    size = 3
+  ) +
+  
+    annotate("text", 
+           x = 32, 
+           y = "NewYork-Presbyterian", 
+           label = "Ongoing", 
+           hjust = 0, 
+           vjust = 0.5,
+           size = 3.5, 
+           color = "red",
+           fontface = "italic") +
+  
+  geom_segment(
+    data = filter(ny_strikes, is_ongoing),
+    aes(x = 0, xend = duration_days, y = name, yend = name),
+    arrow = arrow(length = unit(0.3, "cm"), type = "closed"),
+    color = "red",
+    linewidth = 1.4
+  ) +
+  scale_color_manual(
+    values = c("TRUE" = "red", "FALSE" = "grey60"),
+    labels = c("TRUE" = "2026 NYC Strikes", "FALSE" = "Other US Strikes"),
+    name = NULL
+  ) +
+  
+  scale_x_continuous(breaks = seq(0, 350, 30), limits = c(0, 50), expand = expansion(mult = c(0, 0.1))) +  
+  
+  labs(
+    title = "2026 New York City nurses' strike is among the longest\nin recent US history",
+    subtitle = "When compared to Nurses Together's compilation of strikes from 2020-2025,the 2026 NYC strike ranks among the longest in New York state's history.\nNew York State Nurses Association went on strike on January 12, with NewYork-Presbyterian still ongoing.",
+    x = "Duration (days)",
+    y = NULL
+  ) +
+  
+  theme_minimal(base_family = "sans") +
+  
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_text(size = 18, face = "bold", hjust = 0),
+    plot.subtitle = element_text(size = 9, hjust = 0, margin = margin(b = 15)),
+    axis.text.y = element_text(size = 9, hjust = 0),
+    axis.title.x = element_text(size = 7),
+    legend.position = "top",
+    legend.justification = "left",
+    legend.text = element_text(size = 10),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.margin = margin(15, 15, 15, 15)
+  )
+```
 
 
