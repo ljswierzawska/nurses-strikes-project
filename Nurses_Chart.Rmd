@@ -4,197 +4,96 @@ author: "Luiza Swierzawska"
 date: "2026-02-12"
 output: html_document
 ---
-
-I collected the data from https://www.nursetogether.com/nurse-strikes/. I double-checked the information with news articles online and compiled a list including the duration of each strike. The list covers strikes from years 2020-2025.
-```{r database, echo=TRUE}
-nurse_strikes <- read.csv("nurse-strikes-db.csv")
-```
-
-The current database is missing strikes from this year which are the main focus of the story. Below I added the rows with NYC strikes. 
-```{r database, echo=TRUE}
- 
-# Remove the extra X columns
-nurse_strikes <- nurse_strikes[, c("name", "state", "dates", "duration_days")]
-
-# Now add the new rows
-new_rows <- data.frame(
-  name = c("NewYork-Presbyterian", 
-           "Montefiore Medical Center, NYC", 
-           "Mount Sinai Hospital, NYC"),
-  state = c("New York", "New York", "New York"),
-  dates = c("January 12 - ongoing 2026", 
-            "January 12 - February 9 2026", 
-            "January 12 - February 9 2026"),
-  duration_days = c(31, 29, 29),
-  stringsAsFactors = FALSE
-)
-
-nurse_strikes <- rbind(nurse_strikes, new_rows)
-```
-
 ```{r}
-# Sort by duration_days in descending order
-nurse_strikes_sorted <- nurse_strikes[order(-nurse_strikes$duration_days), ]
-
-# Display top 20
-nurse_strikes_sorted
-```
-In order to highlight the longest nurses' strikes in the recent years in the US and to not make the visualization too overwhelming, I've decided to include only the strikes that lasted longer than 2 weeks. 
-
-```{r}
-library(ggplot2)
+library(tidyverse)
 library(dplyr)
+library(ggplot2)
+```
 
-long_strikes <- nurse_strikes %>%
-  filter(duration_days >= 14) %>%
+I collected the data from https://www.nursetogether.com/nurse-strikes/. I double-checked the information with news articles online and compiled a list including the duration of each strike. The list covers strikes from years 2020-2025, excluding strikes that were averted or were just information pickets. 
+
+Unfortunately, the list from Nurse Together was last time updated on May 5, 2025. I used multi-agent research system from Claude to double-check the dataset to see if there are any strikes missing and to add those that happened after May 5, 2025. I later verified the data with information available online. A major limitation here is that there is no single resource that compiles all strikes. 
+
+The following analysis involves the compilation of Nurse Together list with Claude multi-agent research on post-May 5 nurse strikes. The information kept includes the name of the hospital, the state and the duration of the strike. 
+ 
+```{r database, echo=TRUE}
+nurse_strikes <- read.csv("nurses_strikes_systems.csv")
+nurse_strikes
+```
+
+Given the large quantity of strikes happening in the US in the last years, I made a decision to focus on the New York state. Additionally, in this line of code, I already prepare data for the visualization. 
+```{r}
+nurse_strikes_ny <- nurse_strikes %>% 
+  filter(State == "New York") %>%
   mutate(
-    is_nyc = grepl("NYC|NewYork-Presbyterian|Mount Sinai Hospital, NYC|Montefiore Medical Center, NYC", name),
-    is_ongoing = grepl("ongoing", dates, ignore.case = TRUE)
-  ) %>%
-  arrange(duration_days)
-
-ggplot(long_strikes, aes(y = reorder(name, duration_days))) +
+    is_nyc_2026 = grepl("Montefiore.*2026|Mount Sinai.*2026|NewYork-Presbyterian.*2026", Name.and.Date),
+    is_ongoing = (Ongoing == "Yes"),
+    Name.and.Date = gsub(" in [^—]+—", " —", Name.and.Date),
+    Name.and.Date = gsub(" — ", " (", Name.and.Date),
+    Name.and.Date = gsub("—", " (", Name.and.Date),
+    Name.and.Date = paste0(Name.and.Date, ")"),
+    Name.and.Date = fct_reorder(Name.and.Date, Duration)
+  )
+nurse_strikes_ny
+```
+```{r}
+ggplot(nurse_strikes_ny, aes(x = Duration, y = Name.and.Date)) +
   
-  # Lines for all strikes
   geom_linerange(
-    aes(xmin = 0, xmax = duration_days, color = is_nyc),
-    linewidth = 1.4
-  ) +
-  
-  # Points for completed strikes only
+  aes(xmin = 0, xmax = Duration, color = is_nyc_2026),
+  linewidth = 1
+) + 
   geom_point(
-    data = filter(long_strikes, !is_ongoing),
-    aes(x = duration_days, color = is_nyc),
-    size = 3
-  ) +
-  
-    annotate("text", 
-           x = 35, 
-           y = "NewYork-Presbyterian", 
-           label = "Ongoing", 
-           hjust = 0, 
-           vjust = 0.5,
-           size = 3.5, 
-           color = "red",
-           fontface = "italic") +
-  
-  geom_segment(
-    data = filter(long_strikes, is_ongoing),
-    aes(x = 0, xend = duration_days, y = name, yend = name),
-    arrow = arrow(length = unit(0.3, "cm"), type = "closed"),
-    color = "red",
-    linewidth = 1.4
-  ) +
+  data = filter(nurse_strikes_ny, !is_ongoing),
+  aes(x = Duration, color = is_nyc_2026),
+  size = 2
+) +
   scale_color_manual(
-    values = c("TRUE" = "red", "FALSE" = "grey60"),
-    labels = c("TRUE" = "2026 NYC Strikes", "FALSE" = "Other US Strikes"),
-    name = NULL
-  ) +
-  
-  scale_x_continuous(breaks = seq(0, 350, 30)) +  # Grid every 30 days
-  
+  values = c("TRUE" = "firebrick", "FALSE" = "#5a4a4a"),
+  labels = c("TRUE" = "2026 NYC Strikes", "FALSE" = "Other NY Strikes"),
+  name = NULL
+) + 
+  annotate("text",
+  x = 43,
+  y = "NewYork-Presbyterian (January 2026)",
+  label = "Ongoing",
+  hjust = 0.5, vjust = 0.5,
+  size = 3.5, color = "firebrick", fontface = "italic"
+) +
+  geom_segment(
+  data = filter(nurse_strikes_ny, is_ongoing),
+  aes(x = 0, xend = Duration, y = Name.and.Date, yend = Name.and.Date),
+  arrow = arrow(length = unit(0.3, "cm"), type = "closed"),
+  color = "firebrick",
+  linewidth = 1.4
+) +
+  scale_x_continuous(
+  breaks = seq(0, 350, 5),
+  limits = c(0, 50),
+  expand = expansion(mult = c(0, 0.1))
+) +
   labs(
-    title = "2026 New York nurses' strike is among the longest\nin recent US history",
-    subtitle = "When compared to Nurses Together's compilation of strikes from 2020-2025,the 2026 NYC strike ranks among the longest in recent history.\nNew York State Nurses Association went on strike on January 12, with NewYork-Presbyterian still ongoing.",
-    x = "Duration (days)",
-    y = NULL
-  ) +
-  
-  theme_minimal(base_family = "sans") +
-  
+  title = "2026 New York City nurses' strike is among the longest\nin recent NY state history",
+  subtitle = "The 2026 NYC strikes set records in duration statewide. The New York State Nurses Association walked out on January 12.\nThe dispute at NewYork-Presbyterian remains unresolved.",
+  x = "Duration (days)",
+  y = NULL
+) +
+  theme_minimal(base_family = "Georgia") +
   theme(
     plot.title.position = "plot",
-    plot.title = element_text(size = 18, face = "bold", hjust = 0),
-    plot.subtitle = element_text(size = 9, hjust = 0, margin = margin(b = 15)),
-    axis.text.y = element_text(size = 9, hjust = 0),
-    axis.title.x = element_text(size = 7),
+    plot.title = element_text(size = 18, face = "bold", hjust = 0, color = "firebrick", margin = margin(b = 20)),
+    plot.subtitle = element_text(size = 9, hjust = 0, margin = margin(b = 15), color = "grey20"),
+    axis.text.x = element_text(size = 8, color = "grey30"),
+    axis.text.y = element_text(size = 9, hjust = 0, color = "grey20"),
+    axis.title.x = element_text(size = 7, color = "grey30"),
     legend.position = "top",
     legend.justification = "left",
     legend.text = element_text(size = 10),
+    panel.grid.major.x = element_line(color = "#f2d0d0", linewidth = 0.4),
     panel.grid.major.y = element_blank(),
     panel.grid.minor = element_blank(),
     plot.margin = margin(15, 15, 15, 15)
-  )
-```
-TK - still need to figure out the dates so it's not to overwhelming. Probably will do something like: Hospital Name (Year), State
-TK - I have interviews with the nurses who were protesting in front of the NYC Presbyterian. I just need to figure out how to nicely put it together. Still looking for experts.
-
-I had an idea that maybe a better methodological choice would be to focus on strikes in NY state. 
-```{r}
-ny_strikes <- nurse_strikes %>%
-  filter(state = "New York") %>%
-  mutate(
-    is_nyc = grepl("NYC|NewYork-Presbyterian|Mount Sinai Hospital, NYC|Montefiore Medical Center, NYC", name),
-    is_ongoing = grepl("ongoing", dates, ignore.case = TRUE)
-  ) %>%
-  arrange(duration_days)
-
-ny_strikes
-```
-
-```{r}
-ggplot(ny_strikes, aes(y = reorder(name, duration_days))) +
-  
-  # Lines for all strikes
-  geom_linerange(
-    aes(xmin = 0, xmax = duration_days, color = is_nyc),
-    linewidth = 1.4
-  ) +
-  
-  # Points for completed strikes only
-  geom_point(
-    data = filter(ny_strikes, !is_ongoing),
-    aes(x = duration_days, color = is_nyc),
-    size = 3
-  ) +
-  
-    annotate("text", 
-           x = 32, 
-           y = "NewYork-Presbyterian", 
-           label = "Ongoing", 
-           hjust = 0, 
-           vjust = 0.5,
-           size = 3.5, 
-           color = "red",
-           fontface = "italic") +
-  
-  geom_segment(
-    data = filter(ny_strikes, is_ongoing),
-    aes(x = 0, xend = duration_days, y = name, yend = name),
-    arrow = arrow(length = unit(0.3, "cm"), type = "closed"),
-    color = "red",
-    linewidth = 1.4
-  ) +
-  scale_color_manual(
-    values = c("TRUE" = "red", "FALSE" = "grey60"),
-    labels = c("TRUE" = "2026 NYC Strikes", "FALSE" = "Other US Strikes"),
-    name = NULL
-  ) +
-  
-  scale_x_continuous(breaks = seq(0, 350, 30), limits = c(0, 50), expand = expansion(mult = c(0, 0.1))) +  
-  
-  labs(
-    title = "2026 New York City nurses' strike is among the longest\nin recent US history",
-    subtitle = "When compared to Nurses Together's compilation of strikes from 2020-2025,the 2026 NYC strike ranks among the longest in New York state's history.\nNew York State Nurses Association went on strike on January 12, with NewYork-Presbyterian still ongoing.",
-    x = "Duration (days)",
-    y = NULL
-  ) +
-  
-  theme_minimal(base_family = "sans") +
-  
-  theme(
-    plot.title.position = "plot",
-    plot.title = element_text(size = 18, face = "bold", hjust = 0),
-    plot.subtitle = element_text(size = 9, hjust = 0, margin = margin(b = 15)),
-    axis.text.y = element_text(size = 9, hjust = 0),
-    axis.title.x = element_text(size = 7),
-    legend.position = "top",
-    legend.justification = "left",
-    legend.text = element_text(size = 10),
-    panel.grid.major.y = element_blank(),
-    panel.grid.minor = element_blank(),
-    plot.margin = margin(15, 15, 15, 15)
-  )
+)
 ```
 
 
